@@ -430,6 +430,8 @@
   const LOGIN_EMAIL = "roomcheck@example.com";
   const CONFIG_OK = FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY";
   let db = null, auth = null;
+  // 無操作でログイン画面に戻るまでの時間（分）
+  const IDLE_MINUTES = 30;
 
   let data = { companies: [], homes: [], posts: [] };
   let openCompanyIds = new Set();
@@ -1397,6 +1399,13 @@
 
   // ---------- 初期表示 ----------
   let started = false;
+  let lastActivity = Date.now();
+  function stopApp(){
+    unsubscribers.forEach(u=>u());
+    unsubscribers = [];
+    snapStore.companies = snapStore.homes = snapStore.posts = null;
+    started = false;
+  }
   function startApp(){
     if(started) return;
     started = true;
@@ -1466,12 +1475,30 @@
     auth.onAuthStateChanged(user=>{
       if(user){
         gate.style.display = "none";
+        lastActivity = Date.now();
         startApp();
       }else{
+        stopApp();
         gate.style.display = "flex";
+        input.value = "";
         setTimeout(()=>input.focus(), 100);
       }
     });
+
+    // ---- 無操作タイムアウト ----
+    function checkIdle(){
+      if(!auth || !auth.currentUser) return;
+      if(Date.now() - lastActivity >= IDLE_MINUTES * 60 * 1000){
+        auth.signOut();
+      }
+    }
+    ["touchstart","click","keydown","scroll","mousemove"].forEach(ev=>{
+      window.addEventListener(ev, ()=>{ lastActivity = Date.now(); }, {passive:true, capture:true});
+    });
+    setInterval(checkIdle, 15000);
+    // スマホでバックグラウンドから戻った時にも判定する
+    document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) checkIdle(); });
+    window.addEventListener("pageshow", checkIdle);
   }
   setupAuth();
 })();
