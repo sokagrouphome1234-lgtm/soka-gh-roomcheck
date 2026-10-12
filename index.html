@@ -336,7 +336,7 @@
 </style>
 </head>
 <body>
-<div id="authGate" style="display:none"><div class="box"><h2>🏠 空室情報</h2><p>パスワードを入力してください</p><input type="password" id="authInput" autocomplete="current-password" placeholder="パスワード"><button id="authBtn" type="button">開く</button><div id="authErr"></div></div></div>
+<div id="authGate"><div class="box"><h2>🏠 空室情報</h2><p>パスワードを入力してください</p><input type="password" id="authInput" autocomplete="current-password" placeholder="パスワード"><button id="authBtn" type="button">開く</button><div id="authErr"></div></div></div>
 
 <header>
   <h1>🏡 グループホーム空室情報</h1>
@@ -1400,12 +1400,20 @@
     started = true;
     // 旧バージョン（スプレッドシート版）の端末内データを一度消去し、Firebaseのデータだけを表示する
     try{
-      ["gh_vacancy_cache_v1","gh_gas_url","gh_auth_ok_v1","gh_vacancy_cache_fb1"].forEach(k=> localStorage.removeItem(k));
+      if(!localStorage.getItem("gh_fb_reset_done")){
+        ["gh_vacancy_cache_v1","gh_gas_url","gh_auth_ok_v1","gh_vacancy_cache_fb1"].forEach(k=> localStorage.removeItem(k));
+        localStorage.setItem("gh_fb_reset_done","1");
+      }
     }catch(e){}
-    data = { companies: [], homes: [], posts: [] };
+    loadLocalCache();
     renderTop();
     setConnStatus("busy", "接続中…");
     startRealtime();
+    setTimeout(()=>{
+      if(!snapStore.companies || !snapStore.homes || !snapStore.posts){
+        setConnStatus("err", "データベースに接続できません（通信環境を確認し「更新」を押してください）");
+      }
+    }, 10000);
   }
 
   // ---------- ログイン（Firebase Authentication・共通パスワード） ----------
@@ -1421,8 +1429,14 @@
       btn.disabled = true;
       return;
     }
-    firebase.initializeApp(FIREBASE_CONFIG);
-    auth = firebase.auth();
+    try{
+      firebase.initializeApp(FIREBASE_CONFIG);
+      auth = firebase.auth();
+    }catch(e){
+      err.textContent = "初期化に失敗しました（" + ((e && e.code) || e) + "）。Safariなど標準のブラウザで開いてください";
+      btn.disabled = true;
+      return;
+    }
     db = firebase.firestore();
     try{ db.settings({experimentalAutoDetectLongPolling: true, merge: true}); }catch(e){}
 
@@ -1431,6 +1445,9 @@
       btn.disabled = true;
       try{
         await auth.signInWithEmailAndPassword(LOGIN_EMAIL, input.value);
+        // ログイン状態の通知が来ない環境でも先に進めるよう、成功時に直接開く
+        gate.style.display = "none";
+        startApp();
       }catch(e){
         const code = e && e.code || "";
         if(code === "auth/network-request-failed") err.textContent = "通信できません。電波を確認してください";
