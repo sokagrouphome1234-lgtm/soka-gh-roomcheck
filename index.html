@@ -414,7 +414,7 @@
 <script>
 (function(){
   "use strict";
-  const LOCAL_CACHE_KEY = "gh_vacancy_cache_v1";
+  const LOCAL_CACHE_KEY = "gh_vacancy_cache_fb1";
   // ↓ Firebaseコンソールの「firebaseConfig」をここに貼り付けます
   const FIREBASE_CONFIG = {
     apiKey: "AIzaSyBsxQDm-vGmfoOMo9vvihDOH9wAI1BWBvc",
@@ -1394,7 +1394,11 @@
   function startApp(){
     if(started) return;
     started = true;
-    loadLocalCache();
+    // 旧バージョン（スプレッドシート版）の端末内データを一度消去し、Firebaseのデータだけを表示する
+    try{
+      ["gh_vacancy_cache_v1","gh_gas_url","gh_auth_ok_v1","gh_vacancy_cache_fb1"].forEach(k=> localStorage.removeItem(k));
+    }catch(e){}
+    data = { companies: [], homes: [], posts: [] };
     renderTop();
     setConnStatus("busy", "接続中…");
     startRealtime();
