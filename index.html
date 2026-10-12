@@ -641,9 +641,11 @@
       default:
         return Promise.resolve();
     }
-    return task.catch(err=>{
+    const slowTimer = setTimeout(()=> showToast("サーバーに届いていません。通信状況を確認してください"), 8000);
+    return task.then(()=>{ clearTimeout(slowTimer); }).catch(err=>{
+      clearTimeout(slowTimer);
       console.error(err);
-      showToast("保存に失敗しました。通信状況を確認してください");
+      showToast("保存に失敗しました（" + ((err && err.code) || "不明") + "）");
     });
   }
 
@@ -693,7 +695,7 @@
         applySnapshots();
       }, err=>{
         console.error(err);
-        setConnStatus("err", "接続に失敗しました（キャッシュ表示中）");
+        setConnStatus("err", "接続エラー：" + ((err && err.code) || "不明"));
       });
       unsubscribers.push(u);
     });
@@ -1420,6 +1422,7 @@
     firebase.initializeApp(FIREBASE_CONFIG);
     auth = firebase.auth();
     db = firebase.firestore();
+    try{ db.settings({experimentalAutoDetectLongPolling: true, merge: true}); }catch(e){}
 
     async function submit(){
       err.textContent = "";
