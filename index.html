@@ -1369,7 +1369,9 @@
     }
 
     if(action === "del-company"){
-      askConfirm("この法人と、所属するホームをすべて削除しますか？", ()=>{
+      const delTarget = data.companies.find(c=>c.id === id);
+      const delName = delTarget && delTarget.name ? delTarget.name : "この法人";
+      askConfirm(`「${delName}」と、所属するホームをすべて削除しますか？`, ()=>{
         data.companies = data.companies.filter(c=>c.id !== id);
         data.homes = data.homes.filter(h=>String(h.companyId) !== String(id));
         saveLocalCache();
