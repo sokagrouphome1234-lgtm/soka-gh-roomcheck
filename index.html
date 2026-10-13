@@ -349,7 +349,7 @@
 <div class="screen active" id="screen-top">
   <div class="sort-bar">
     <button class="sort-btn" data-sort="alpha">アルファベット順</button>
-    <button class="sort-btn" data-sort="vacancy">空室順</button>
+    <button class="sort-btn" data-sort="updated">更新日時順</button>
   </div>
   <div id="topList"></div>
 </div>
@@ -440,6 +440,7 @@
   let openEditPostIds = new Set(); // 編集中の投稿ID
   let draftHomes = []; // 登録ボタンを押すまで保存されない新規ホームの仮データ
   let sortMode = localStorage.getItem("gh_sort_mode") || "alpha";
+  if(sortMode !== "alpha" && sortMode !== "updated") sortMode = "alpha";
   const collatorJa = new Intl.Collator("ja");
 
   // タップ操作でフォーカスが移動し、ブラウザが自動スクロールするより前の
@@ -502,8 +503,9 @@
   }
   function getSortedCompanies(){
     const list = [...data.companies];
-    if(sortMode === "vacancy"){
-      list.sort((a,b)=> vacancyOf(b.id) - vacancyOf(a.id));
+    if(sortMode === "updated"){
+      // 最終更新が新しい順（更新履歴のない法人は最後にアルファベット順）
+      list.sort((a,b)=> (Number(b.updatedAt)||0) - (Number(a.updatedAt)||0) || collatorJa.compare(a.name, b.name));
     } else {
       list.sort((a,b)=> collatorJa.compare(a.name, b.name));
     }
