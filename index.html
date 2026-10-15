@@ -317,6 +317,24 @@
   .modal-cancel{background:#EFF1EA; color:#6B6F64;}
   .modal-confirm{background:var(--red); color:#fff;}
 
+  .modal-ok{background:var(--green); color:#fff;}
+  .pw-input{ width:100%; box-sizing:border-box; padding:12px 16px; font-size:16px; border:2px solid var(--green-pale); border-radius:999px; outline:none; font-family:inherit; margin-bottom:8px; }
+  .pw-input:focus{ border-color:var(--green); }
+  .pw-err{ color:var(--red); font-size:12.5px; min-height:18px; margin-bottom:8px; }
+  .form-group-title{ font-size:12.5px; font-weight:800; color:var(--green-deep); margin:18px 0 2px; padding-left:2px; }
+  .form-group-title:first-child{ margin-top:4px; }
+  .form-hint{ font-size:11.5px; color:var(--textsub); line-height:1.6; margin:2px 0 6px; }
+  .lock-ic{ font-size:15px; }
+  .admin-overlay{ display:none; position:fixed; inset:0; z-index:90; background:var(--bg,#F7F8F2); overflow-y:auto; -webkit-overflow-scrolling:touch; }
+  .admin-overlay.show{ display:block; }
+  .admin-head{ position:sticky; top:0; display:flex; align-items:center; justify-content:space-between; padding:16px; background:var(--green); color:#fff; border-radius:0 0 20px 20px; box-shadow:0 2px 10px rgba(47,169,102,.28); }
+  .admin-head h2{ margin:0; font-size:17px; font-weight:800; }
+  .admin-head button{ font-family:inherit; font-size:12px; font-weight:700; color:var(--green-deep); background:#fff; border:none; border-radius:999px; padding:7px 16px; }
+  .admin-body{ padding:16px; }
+  .admin-card{ background:#fff; border-radius:16px; padding:14px 16px; margin-bottom:10px; box-shadow:0 1px 6px rgba(0,0,0,.06); }
+  .admin-card .an{ font-weight:800; color:var(--green-deep); font-size:14.5px; }
+  .admin-card .ap{ margin-top:6px; font-size:15px; font-family:ui-monospace,Menlo,monospace; letter-spacing:.5px; word-break:break-all; }
+  .admin-card .ap.none{ font-family:inherit; color:#AEB2A8; font-size:12.5px; letter-spacing:0; }
   .toast{
     position:fixed; bottom:94px; left:50%; transform:translateX(-50%);
     background:var(--green-deep); color:#fff; padding:10px 20px; border-radius:999px; font-size:13px; font-weight:700;
@@ -342,7 +360,7 @@
   <h1>🏡 グループホーム空室情報</h1>
   <div class="sub-row">
     <div class="sub"><span class="dot" id="connDot"></span><span id="headerSub">読み込み中…</span></div>
-    <button id="manualRefreshBtn" class="refresh-btn" title="今すぐ更新">⟳ 更新</button>
+    <button id="adminBtn" class="refresh-btn" title="管理者モード">🔑 管理者モード</button>
   </div>
 </header>
 
@@ -375,13 +393,17 @@
   <div class="edit-section">
     <button class="btn" id="toggleAddCompanyBtn">＋法人を追加</button>
     <div class="collapsible-body" id="addCompanyBody">
-      <label>法人名</label>
+      <div class="form-group-title">基本情報</div>
+      <label>法人名（必須）</label>
       <input type="text" id="newCompanyName" placeholder="例：会社A">
       <label>代表（問い合わせ先）電話番号</label>
       <input type="text" id="newCompanyPhone" placeholder="例：048-000-0000" inputmode="tel">
       <label>担当者</label>
       <input type="text" id="newCompanyContact">
-      <button class="btn" id="addCompanyBtn">登録</button>
+      <div class="form-group-title">🔒 編集パスワード（必須）</div>
+      <div class="form-hint">この法人の情報を編集するときに必要です。忘れた場合は管理者が確認できます。</div>
+      <input type="text" id="newCompanyPassword" placeholder="4文字以上" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+      <button class="btn" id="addCompanyBtn" style="margin-top:16px;">登録</button>
     </div>
   </div>
 
@@ -406,6 +428,23 @@
       <button class="modal-confirm" id="modalConfirm">削除する</button>
     </div>
   </div>
+</div>
+
+<div class="modal-overlay" id="pwOverlay">
+  <div class="modal-box">
+    <p id="pwTitle"></p>
+    <input type="password" class="pw-input" id="pwInput" placeholder="パスワード" autocomplete="off">
+    <div class="pw-err" id="pwErr"></div>
+    <div class="modal-actions">
+      <button class="modal-cancel" id="pwCancel">キャンセル</button>
+      <button class="modal-ok" id="pwOk">開く</button>
+    </div>
+  </div>
+</div>
+
+<div class="admin-overlay" id="adminOverlay">
+  <div class="admin-head"><h2>🔑 管理者モード</h2><button id="adminClose">閉じる</button></div>
+  <div class="admin-body" id="adminBody"></div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -436,6 +475,9 @@
   let data = { companies: [], homes: [], posts: [] };
   let openCompanyIds = new Set();
   let openEditCompanyIds = new Set();
+  // この端末で今回ログイン中にパスワードを入力して開いた法人（法人ID → パスワード）
+  const unlockedCompanies = new Map();
+  const ADMIN_HASH = "aa217457324bfec5c378be63b53136460d14fc88a8f9cc9a33d9d04495cfa8df";
   let openEditHomeIds = new Set(); // 編集画面のホーム項目の開閉状態（デフォルト全て閉）
   let openEditPostIds = new Set(); // 編集中の投稿ID
   let draftHomes = []; // 登録ボタンを押すまで保存されない新規ホームの仮データ
@@ -611,15 +653,20 @@
         if(typeof contacts === "string"){ try{ contacts = JSON.parse(contacts); }catch(e){ contacts = []; } }
         task = col("companies").doc(String(p.id)).set(clean_({
           id: p.id, name: p.name, phone: p.phone || "", contactPerson: p.contactPerson || "",
-          updatedAt: Number(p.updatedAt) || null, contacts: Array.isArray(contacts) ? contacts : []
+          updatedAt: Number(p.updatedAt) || null, contacts: Array.isArray(contacts) ? contacts : [],
+          hasPassword: p.hasPassword === true ? true : undefined
         }), {merge:true});
         break;
       }
+      case "setCompanyPassword":
+        task = col("companyPasswords").doc(String(p.id)).set({id: String(p.id), password: String(p.password)});
+        break;
       case "deleteCompany": {
         task = col("homes").where("companyId","==",String(p.id)).get().then(snap=>{
           const batch = db.batch();
           snap.forEach(d=> batch.delete(d.ref));
           batch.delete(col("companies").doc(String(p.id)));
+          batch.delete(col("companyPasswords").doc(String(p.id)));
           return batch.commit();
         });
         break;
@@ -719,16 +766,6 @@
       setConnStatus("err", "接続に失敗しました（キャッシュ表示中）");
     });
   }
-
-  document.getElementById("manualRefreshBtn").addEventListener("click", ()=>{
-    const btn = document.getElementById("manualRefreshBtn");
-    btn.classList.add("spinning");
-    btn.disabled = true;
-    refreshFromSheet(false).finally(()=>{
-      btn.classList.remove("spinning");
-      btn.disabled = false;
-    });
-  });
 
   function renderCurrentScreen(){
     const activeTab = document.querySelector(".tab.active");
@@ -970,7 +1007,8 @@
     const sortedCompanies = [...data.companies].sort((a,b)=> collatorJa.compare(a.name, b.name));
     wrap.innerHTML = sortedCompanies.map((c, companyIndex)=>{
       const homes = data.homes.filter(h=>String(h.companyId) === String(c.id));
-      const isOpen = openEditCompanyIds.has(c.id);
+      const isLocked = !!c.hasPassword && !unlockedCompanies.has(c.id);
+      const isOpen = openEditCompanyIds.has(c.id) && !isLocked;
       const homesHtml = homes.map(h=>{
         const isHomeOpen = openEditHomeIds.has(h.id);
         const genderLabel = h.gender === "male" ? "男性" : h.gender === "female" ? "女性" : "男女";
@@ -1095,6 +1133,7 @@
           <div class="company-block-title" data-action="toggle-company-edit" data-id="${c.id}">
             <h3><span class="company-number">${companyIndex + 1}.</span>${escapeHtml(c.name)}</h3>
             <div class="company-block-title-right">
+              ${c.hasPassword ? `<span class="lock-ic">${isLocked ? "🔒" : "🔓"}</span>` : ""}
               <span class="chevron-edit">▶</span>
             </div>
           </div>
@@ -1106,6 +1145,8 @@
               <input type="text" data-field="company-phone" data-id="${c.id}" value="${escapeHtml(c.phone || "")}" inputmode="tel">
               <label>担当者</label>
               <input type="text" data-field="company-contact" data-id="${c.id}" value="${escapeHtml(c.contactPerson || "")}">
+              <label>🔒 編集パスワード</label>
+              <input type="text" data-field="company-password" data-id="${c.id}" value="${escapeHtml(unlockedCompanies.get(c.id) || "")}" placeholder="${c.hasPassword ? "" : "未設定（4文字以上で設定）"}" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
               ${(c.contacts || []).map(ct => `
                 <div class="home-edit-item" data-contact-id="${ct.id}">
                   <span class="del-x" data-action="del-contact" data-id="${ct.id}" data-company-id="${c.id}">✕</span>
@@ -1153,26 +1194,126 @@
   setupCollapsibleToggle("toggleAddCompanyBtn", "addCompanyBody", "＋法人を追加", "－閉じる");
   setupCollapsibleToggle("toggleAddPostBtn", "addPostBody", "＋投稿する", "－閉じる");
 
+  // ---------- パスワード入力ダイアログ ----------
+  async function sha256Hex(str){
+    const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,"0")).join("");
+  }
+  // validate(入力値) が true を返せば成功。キャンセルなら false を返す
+  function askPassword(title, validate){
+    return new Promise(resolve=>{
+      const ov = document.getElementById("pwOverlay");
+      const input = document.getElementById("pwInput");
+      const err = document.getElementById("pwErr");
+      const ok = document.getElementById("pwOk");
+      const cancel = document.getElementById("pwCancel");
+      document.getElementById("pwTitle").textContent = title;
+      input.value = ""; err.textContent = "";
+      ov.classList.add("show");
+      setTimeout(()=>input.focus(), 60);
+      let busy = false;
+      function close(result){
+        ov.classList.remove("show");
+        ok.onclick = cancel.onclick = input.onkeydown = null;
+        resolve(result);
+      }
+      async function submit(){
+        if(busy) return;
+        busy = true; ok.disabled = true; err.textContent = "";
+        let good = false;
+        try{
+          good = await validate(input.value);
+        }catch(e){
+          err.textContent = "確認できませんでした。通信状況を確認してください";
+          busy = false; ok.disabled = false;
+          return;
+        }
+        busy = false; ok.disabled = false;
+        if(good){ close(true); }
+        else{ err.textContent = "パスワードが違います"; input.value = ""; input.focus(); }
+      }
+      ok.onclick = submit;
+      cancel.onclick = ()=> close(false);
+      input.onkeydown = e=>{ if(e.key === "Enter"){ e.preventDefault(); submit(); } };
+    });
+  }
+  function closePwDialog(){
+    document.getElementById("pwOverlay").classList.remove("show");
+  }
+
+  // 法人の編集を開けるか確認する（パスワード未設定の法人はそのまま開ける）
+  function unlockCompany(id){
+    const c = data.companies.find(x=>x.id === id);
+    if(!c) return Promise.resolve(false);
+    if(!c.hasPassword || unlockedCompanies.has(id)) return Promise.resolve(true);
+    return askPassword(`「${c.name}」の編集パスワードを入力してください`, async v=>{
+      const snap = await db.collection("companyPasswords").doc(String(id)).get();
+      const real = snap.exists ? String(snap.data().password || "") : "";
+      if(real && v === real){ unlockedCompanies.set(id, real); return true; }
+      return false;
+    });
+  }
+
+  // ---------- 管理者モード ----------
+  function closeAdmin(){
+    document.getElementById("adminOverlay").classList.remove("show");
+    document.getElementById("adminBody").innerHTML = "";
+  }
+  async function renderAdmin(){
+    const body = document.getElementById("adminBody");
+    body.innerHTML = `<div class="small-gray">読み込み中…</div>`;
+    try{
+      const snap = await db.collection("companyPasswords").get();
+      const pw = {};
+      snap.forEach(d=>{ pw[d.id] = String(d.data().password || ""); });
+      const list = [...data.companies].sort((a,b)=> collatorJa.compare(a.name, b.name));
+      body.innerHTML = list.length === 0
+        ? `<div class="small-gray">法人が登録されていません</div>`
+        : `<div class="form-hint" style="margin-bottom:12px;">各法人の編集パスワードです。取り扱いにご注意ください。</div>` +
+          list.map(c=>`
+            <div class="admin-card">
+              <div class="an">${escapeHtml(c.name)}</div>
+              ${pw[c.id] ? `<div class="ap">${escapeHtml(pw[c.id])}</div>` : `<div class="ap none">パスワード未設定</div>`}
+            </div>`).join("");
+    }catch(e){
+      body.innerHTML = `<div class="small-gray">読み込めませんでした。通信状況を確認してください</div>`;
+    }
+  }
+  document.getElementById("adminBtn").addEventListener("click", async ()=>{
+    const ok = await askPassword("管理者パスワードを入力してください", async v=>{
+      return (await sha256Hex(v)) === ADMIN_HASH;
+    });
+    if(!ok) return;
+    document.getElementById("adminOverlay").classList.add("show");
+    renderAdmin();
+  });
+  document.getElementById("adminClose").addEventListener("click", closeAdmin);
+
   // ---------- 法人追加 ----------
   document.getElementById("addCompanyBtn").addEventListener("click", ()=>{
     const input = document.getElementById("newCompanyName");
     const phoneInput = document.getElementById("newCompanyPhone");
     const contactInput = document.getElementById("newCompanyContact");
+    const pwInputEl = document.getElementById("newCompanyPassword");
     const name = input.value.trim();
     const phone = phoneInput.value.trim();
     const contactPerson = contactInput.value.trim();
+    const password = pwInputEl.value.trim();
     if(!name){ showToast("法人名を入力してください"); return; }
-    const newCompany = {id: uid(), name, phone, contactPerson, contacts: []};
+    if(password.length < 4){ showToast("編集パスワードを4文字以上で入力してください"); return; }
+    const newCompany = {id: uid(), name, phone, contactPerson, contacts: [], hasPassword: true};
     data.companies.push(newCompany);
+    unlockedCompanies.set(newCompany.id, password);
     saveLocalCache();
     input.value = "";
     phoneInput.value = "";
     contactInput.value = "";
+    pwInputEl.value = "";
     collapseForm("toggleAddCompanyBtn", "addCompanyBody", "＋法人を追加");
     preserveScroll(renderEdit);
     showToast("法人を追加しました");
-    dbWrite({action:"addCompany", id:newCompany.id, name:newCompany.name, phone:newCompany.phone, contactPerson:newCompany.contactPerson, contacts: "[]"})
-      .then(()=> setTimeout(()=>refreshFromSheet(true), 1200));
+    dbWrite({action:"setCompanyPassword", id:newCompany.id, password})
+      .then(()=> dbWrite({action:"addCompany", id:newCompany.id, name:newCompany.name, phone:newCompany.phone, contactPerson:newCompany.contactPerson, contacts: "[]", hasPassword: true}));
   });
 
   // 一言掲示板の投稿は最大15件まで。超えた分は古いものから自動的に削除する
@@ -1221,7 +1362,13 @@
       const contactPerson = block.querySelector("[data-field='company-contact']").value.trim();
       if(!name){ showToast("法人名を入力してください"); return; }
       const company = data.companies.find(c=>c.id === id);
+      const pwEl = block.querySelector("[data-field='company-password']");
+      const newPw = pwEl ? pwEl.value.trim() : "";
+      if(company && company.hasPassword && !newPw){ showToast("編集パスワードは空にできません"); return; }
+      if(newPw && newPw.length < 4){ showToast("編集パスワードは4文字以上にしてください"); return; }
       if(company){
+        const pwChanged = !!newPw && newPw !== (unlockedCompanies.get(id) || "");
+        if(pwChanged){ company.hasPassword = true; unlockedCompanies.set(id, newPw); }
         company.name = name;
         company.phone = phone;
         company.contactPerson = contactPerson;
@@ -1238,8 +1385,8 @@
         saveLocalCache();
         preserveScrollAnchoredTo(`.company-block[data-company-id="${id}"]`, renderEdit);
         showToast("法人情報を保存しました");
-        dbWrite({action:"updateCompany", id, name, phone, contactPerson, updatedAt: company.updatedAt || "", contacts: JSON.stringify(company.contacts)})
-          .then(()=> setTimeout(()=>refreshFromSheet(true), 1200));
+        if(pwChanged) dbWrite({action:"setCompanyPassword", id, password:newPw});
+        dbWrite({action:"updateCompany", id, name, phone, contactPerson, updatedAt: company.updatedAt || "", contacts: JSON.stringify(company.contacts), hasPassword: pwChanged ? true : undefined});
       }
       return;
     }
@@ -1266,8 +1413,18 @@
       const block = btn.closest(".company-block");
       const opening = !block.classList.contains("open");
       if(opening){
-        openEditCompanyIds.add(id);
-        block.classList.add("open");
+        const comp = data.companies.find(x=>x.id === id);
+        if(!comp || !comp.hasPassword || unlockedCompanies.has(id)){
+          // パスワード不要（または入力済み）の法人は、これまで通りその場で開く
+          openEditCompanyIds.add(id);
+          block.classList.add("open");
+        } else {
+          unlockCompany(id).then(ok=>{
+            if(!ok) return;
+            openEditCompanyIds.add(id);
+            preserveScrollAnchoredTo(`.company-block[data-company-id="${id}"]`, renderEdit);
+          });
+        }
       } else {
         openEditCompanyIds.delete(id);
         block.classList.remove("open");
@@ -1422,6 +1579,10 @@
     return Date.now() - lastActiveAt() >= IDLE_MINUTES * 60 * 1000;
   }
   function stopApp(){
+    unlockedCompanies.clear();
+    openEditCompanyIds.clear();
+    closePwDialog();
+    closeAdmin();
     unsubscribers.forEach(u=>u());
     unsubscribers = [];
     snapStore.companies = snapStore.homes = snapStore.posts = null;
