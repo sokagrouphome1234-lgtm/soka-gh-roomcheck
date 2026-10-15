@@ -1402,6 +1402,25 @@
   // ---------- 初期表示 ----------
   let started = false;
   let lastActivity = Date.now();
+  const LAST_KEY = "gh_last_activity";
+  let lastWrite = 0;
+  function touchActivity(force){
+    lastActivity = Date.now();
+    if(force || lastActivity - lastWrite > 5000){
+      lastWrite = lastActivity;
+      try{ localStorage.setItem(LAST_KEY, String(lastActivity)); }catch(e){}
+    }
+  }
+  // 最後に操作した時刻（アプリを閉じていた間も含めて判定するため端末に保存）
+  function lastActiveAt(){
+    try{
+      const v = Number(localStorage.getItem(LAST_KEY));
+      return v > 0 ? v : 0;
+    }catch(e){ return lastActivity; }
+  }
+  function isIdleExpired(){
+    return Date.now() - lastActiveAt() >= IDLE_MINUTES * 60 * 1000;
+  }
   function stopApp(){
     unsubscribers.forEach(u=>u());
     unsubscribers = [];
@@ -1457,6 +1476,7 @@
       err.textContent = "";
       btn.disabled = true;
       try{
+        touchActivity(true); // ログイン直後に「時間切れ」と誤判定されないよう先に記録
         await auth.signInWithEmailAndPassword(LOGIN_EMAIL, input.value);
         // ログイン状態の通知が来ない環境でも先に進めるよう、成功時に直接開く
         gate.style.display = "none";
@@ -1476,8 +1496,13 @@
 
     auth.onAuthStateChanged(user=>{
       if(user){
+        // 前回の操作から時間がたっていたら（ホーム画面から開き直した場合なども）ログインし直す
+        if(isIdleExpired()){
+          auth.signOut();
+          return;
+        }
         gate.style.display = "none";
-        lastActivity = Date.now();
+        touchActivity(true);
         startApp();
       }else{
         stopApp();
@@ -1490,12 +1515,12 @@
     // ---- 無操作タイムアウト ----
     function checkIdle(){
       if(!auth || !auth.currentUser) return;
-      if(Date.now() - lastActivity >= IDLE_MINUTES * 60 * 1000){
+      if(isIdleExpired()){
         auth.signOut();
       }
     }
     ["touchstart","click","keydown","scroll","mousemove"].forEach(ev=>{
-      window.addEventListener(ev, ()=>{ lastActivity = Date.now(); }, {passive:true, capture:true});
+      window.addEventListener(ev, ()=>{ if(auth && auth.currentUser) touchActivity(false); }, {passive:true, capture:true});
     });
     setInterval(checkIdle, 15000);
     // スマホでバックグラウンドから戻った時にも判定する
