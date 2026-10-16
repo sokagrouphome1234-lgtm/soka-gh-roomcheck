@@ -396,6 +396,8 @@
       <div class="form-group-title">基本情報</div>
       <label>法人名（必須）</label>
       <input type="text" id="newCompanyName" placeholder="例：会社A">
+      <label>本社住所（任意）</label>
+      <input type="text" id="newCompanyAddress" placeholder="例：埼玉県草加市〇〇1-2-3">
       <label>代表（問い合わせ先）電話番号</label>
       <input type="text" id="newCompanyPhone" placeholder="例：048-000-0000" inputmode="tel">
       <label>担当者</label>
@@ -652,7 +654,8 @@
         let contacts = p.contacts;
         if(typeof contacts === "string"){ try{ contacts = JSON.parse(contacts); }catch(e){ contacts = []; } }
         task = col("companies").doc(String(p.id)).set(clean_({
-          id: p.id, name: p.name, phone: p.phone || "", contactPerson: p.contactPerson || "",
+          id: p.id, name: p.name, address: p.address === undefined ? undefined : String(p.address),
+          phone: p.phone || "", contactPerson: p.contactPerson || "",
           updatedAt: Number(p.updatedAt) || null, contacts: Array.isArray(contacts) ? contacts : [],
           hasPassword: p.hasPassword === true ? true : undefined
         }), {merge:true});
@@ -1141,6 +1144,8 @@
             <div class="company-info-edit">
               <label>法人名</label>
               <input type="text" data-field="company-name" data-id="${c.id}" value="${escapeHtml(c.name)}">
+              <label>本社住所（任意）</label>
+              <input type="text" data-field="company-address" data-id="${c.id}" value="${escapeHtml(c.address || "")}" placeholder="例：埼玉県草加市〇〇1-2-3">
               <label>代表（問い合わせ先）電話番号</label>
               <input type="text" data-field="company-phone" data-id="${c.id}" value="${escapeHtml(c.phone || "")}" inputmode="tel">
               <label>担当者</label>
@@ -1295,25 +1300,28 @@
     const phoneInput = document.getElementById("newCompanyPhone");
     const contactInput = document.getElementById("newCompanyContact");
     const pwInputEl = document.getElementById("newCompanyPassword");
+    const addressInput = document.getElementById("newCompanyAddress");
+    const address = addressInput.value.trim();
     const name = input.value.trim();
     const phone = phoneInput.value.trim();
     const contactPerson = contactInput.value.trim();
     const password = pwInputEl.value.trim();
     if(!name){ showToast("法人名を入力してください"); return; }
     if(password.length < 4){ showToast("編集パスワードを4文字以上で入力してください"); return; }
-    const newCompany = {id: uid(), name, phone, contactPerson, contacts: [], hasPassword: true};
+    const newCompany = {id: uid(), name, address, phone, contactPerson, contacts: [], hasPassword: true};
     data.companies.push(newCompany);
     unlockedCompanies.set(newCompany.id, password);
     saveLocalCache();
     input.value = "";
     phoneInput.value = "";
     contactInput.value = "";
+    addressInput.value = "";
     pwInputEl.value = "";
     collapseForm("toggleAddCompanyBtn", "addCompanyBody", "＋法人を追加");
     preserveScroll(renderEdit);
     showToast("法人を追加しました");
     dbWrite({action:"setCompanyPassword", id:newCompany.id, password})
-      .then(()=> dbWrite({action:"addCompany", id:newCompany.id, name:newCompany.name, phone:newCompany.phone, contactPerson:newCompany.contactPerson, contacts: "[]", hasPassword: true}));
+      .then(()=> dbWrite({action:"addCompany", id:newCompany.id, name:newCompany.name, address:newCompany.address, phone:newCompany.phone, contactPerson:newCompany.contactPerson, contacts: "[]", hasPassword: true}));
   });
 
   // 一言掲示板の投稿は最大15件まで。超えた分は古いものから自動的に削除する
@@ -1358,6 +1366,7 @@
     if(action === "save-company"){
       const block = btn.closest(".company-block");
       const name = block.querySelector("[data-field='company-name']").value.trim();
+      const address = block.querySelector("[data-field='company-address']").value.trim();
       const phone = block.querySelector("[data-field='company-phone']").value.trim();
       const contactPerson = block.querySelector("[data-field='company-contact']").value.trim();
       if(!name){ showToast("法人名を入力してください"); return; }
@@ -1370,6 +1379,7 @@
         const pwChanged = !!newPw && newPw !== (unlockedCompanies.get(id) || "");
         if(pwChanged){ company.hasPassword = true; unlockedCompanies.set(id, newPw); }
         company.name = name;
+        company.address = address;
         company.phone = phone;
         company.contactPerson = contactPerson;
         // 追加した連絡先の入力内容を現在のDOMから読み取って反映する
@@ -1386,7 +1396,7 @@
         preserveScrollAnchoredTo(`.company-block[data-company-id="${id}"]`, renderEdit);
         showToast("法人情報を保存しました");
         if(pwChanged) dbWrite({action:"setCompanyPassword", id, password:newPw});
-        dbWrite({action:"updateCompany", id, name, phone, contactPerson, updatedAt: company.updatedAt || "", contacts: JSON.stringify(company.contacts), hasPassword: pwChanged ? true : undefined});
+        dbWrite({action:"updateCompany", id, name, address, phone, contactPerson, updatedAt: company.updatedAt || "", contacts: JSON.stringify(company.contacts), hasPassword: pwChanged ? true : undefined});
       }
       return;
     }
