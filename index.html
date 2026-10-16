@@ -1199,6 +1199,44 @@
   setupCollapsibleToggle("toggleAddCompanyBtn", "addCompanyBody", "＋法人を追加", "－閉じる");
   setupCollapsibleToggle("toggleAddPostBtn", "addPostBody", "＋投稿する", "－閉じる");
 
+  // ---------- 電話番号の自動ハイフン ----------
+  function formatPhone(raw){
+    const d = String(raw).replace(/[０-９]/g, c=> String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/\D/g, "").slice(0, 11);
+    if(!d) return "";
+    let groups;
+    if(d.startsWith("0120") || d.startsWith("0800")) groups = [4, 3, 3];   // フリーダイヤル
+    else if(/^(050|070|080|090)/.test(d)) groups = [3, 4, 4];               // 携帯・IP電話
+    else if(/^(03|06)/.test(d)) groups = [2, 4, 4];                        // 東京・大阪
+    else groups = [3, 3, 4];                                                // 048 など
+    const parts = [];
+    let i = 0;
+    for(const g of groups){
+      if(i >= d.length) break;
+      parts.push(d.slice(i, i + g));
+      i += g;
+    }
+    return parts.join("-");
+  }
+  document.addEventListener("input", e=>{
+    const el = e.target;
+    if(!el || el.tagName !== "INPUT" || el.getAttribute("inputmode") !== "tel") return;
+    if(e.isComposing) return;
+    const before = el.value;
+    const caret = el.selectionStart;
+    const digitsBeforeCaret = before.slice(0, caret).replace(/\D/g, "").length;
+    const formatted = formatPhone(before);
+    if(formatted === before) return;
+    el.value = formatted;
+    // 入力位置（数字の個数）を保ったままカーソルを戻す
+    let pos = 0, count = 0;
+    while(pos < formatted.length && count < digitsBeforeCaret){
+      if(/\d/.test(formatted[pos])) count++;
+      pos++;
+    }
+    if(caret >= before.length) pos = formatted.length;
+    try{ el.setSelectionRange(pos, pos); }catch(err){}
+  });
+
   // ---------- パスワード入力ダイアログ ----------
   async function sha256Hex(str){
     const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(str));
