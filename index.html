@@ -335,6 +335,45 @@
   .admin-card .an{ font-weight:800; color:var(--green-deep); font-size:14.5px; }
   .admin-card .ap{ margin-top:6px; font-size:15px; font-family:ui-monospace,Menlo,monospace; letter-spacing:.5px; word-break:break-all; }
   .admin-card .ap.none{ font-family:inherit; color:#AEB2A8; font-size:12.5px; letter-spacing:0; }
+  .home-row[data-action="open-home"]{ cursor:pointer; -webkit-tap-highlight-color:rgba(47,169,102,.12); }
+  .home-row[data-action="open-home"]:active{ background:var(--green-pale); }
+  .home-more{ color:#B9BDB1; font-size:20px; margin-left:6px; vertical-align:-2px; }
+
+  .sheet-overlay{ display:none; position:fixed; inset:0; z-index:80; background:rgba(40,60,40,0); transition:background .28s; }
+  .sheet-overlay.show{ display:block; }
+  .sheet-overlay.in{ background:rgba(40,60,40,.45); }
+  .sheet{
+    position:absolute; left:0; right:0; bottom:0; max-width:560px; margin:0 auto; max-height:90vh;
+    background:#fff; border-radius:24px 24px 0 0; display:flex; flex-direction:column;
+    transform:translateY(100%); transition:transform .32s cubic-bezier(.2,.9,.3,1);
+    box-shadow:0 -6px 24px rgba(0,0,0,.18);
+  }
+  .sheet-overlay.in .sheet{ transform:translateY(0); }
+  .sheet-handle-area{ padding:10px 0 8px; flex-shrink:0; touch-action:none; }
+  .sheet-handle{ width:42px; height:5px; border-radius:3px; background:#D7DBD0; margin:0 auto; }
+  .sheet-close{
+    position:absolute; top:8px; right:12px; width:32px; height:32px; border-radius:50%; border:none;
+    background:#EFF1EA; color:#6B6F64; font-size:15px; font-family:inherit; cursor:pointer; z-index:2;
+  }
+  .sheet-body{ overflow-y:auto; -webkit-overflow-scrolling:touch; overscroll-behavior:contain; padding:0 16px calc(28px + env(safe-area-inset-bottom)); }
+  .sheet-carousel{ display:flex; overflow-x:auto; scroll-snap-type:x mandatory; -webkit-overflow-scrolling:touch; border-radius:16px; gap:0; scrollbar-width:none; }
+  .sheet-carousel::-webkit-scrollbar{ display:none; }
+  .sheet-carousel img{ flex:0 0 100%; width:100%; aspect-ratio:4/3; object-fit:cover; scroll-snap-align:center; background:#EFF1EA; }
+  .sheet-counter{ text-align:right; font-size:11px; color:var(--textsub); margin:4px 4px 0; }
+  .sheet-photo-loading{ font-size:12px; color:#AEB2A8; text-align:center; padding:26px 0; background:#F6F8F2; border-radius:16px; }
+  .sheet-title{ font-size:19px; font-weight:800; color:var(--textmain); margin:12px 0 4px; line-height:1.4; }
+  .sheet-row{ display:flex; align-items:center; gap:10px; margin:8px 0; flex-wrap:wrap; }
+  .sheet-vac{ font-size:13px; color:var(--textsub); }
+  .sheet-vac b{ color:var(--red); font-size:20px; font-weight:800; }
+  .sheet-sec{ margin-top:16px; padding-top:14px; border-top:1.5px solid var(--green-pale); }
+  .sheet-sec h4{ margin:0 0 6px; font-size:12px; color:var(--green-deep); font-weight:800; }
+  .sheet-sec p{ margin:0; font-size:13.5px; line-height:1.7; white-space:pre-wrap; word-break:break-word; }
+  .sheet-map{ display:inline-block; margin-top:6px; font-size:12.5px; font-weight:700; color:var(--green-deep); text-decoration:none; background:var(--green-pale); padding:6px 14px; border-radius:999px; }
+
+  .photo-thumbs{ display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 8px; }
+  .photo-thumb{ position:relative; width:78px; height:78px; border-radius:12px; overflow:hidden; background:#EFF1EA; }
+  .photo-thumb img{ width:100%; height:100%; object-fit:cover; display:block; }
+  .photo-del{ position:absolute; top:3px; right:3px; width:22px; height:22px; border-radius:50%; background:rgba(0,0,0,.6); color:#fff; font-size:12px; display:flex; align-items:center; justify-content:center; cursor:pointer; }
   .toast{
     position:fixed; bottom:94px; left:50%; transform:translateX(-50%);
     background:var(--green-deep); color:#fff; padding:10px 20px; border-radius:999px; font-size:13px; font-weight:700;
@@ -449,6 +488,14 @@
   <div class="admin-body" id="adminBody"></div>
 </div>
 
+<div class="sheet-overlay" id="sheetOverlay">
+  <div class="sheet" id="sheet">
+    <div class="sheet-handle-area" id="sheetHandle"><div class="sheet-handle"></div></div>
+    <button class="sheet-close" id="sheetClose" aria-label="閉じる">✕</button>
+    <div class="sheet-body" id="sheetBody"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -479,6 +526,8 @@
   let openEditCompanyIds = new Set();
   // この端末で今回ログイン中にパスワードを入力して開いた法人（法人ID → パスワード）
   const unlockedCompanies = new Map();
+  const MAX_PHOTOS = 3;
+  const photoCache = new Map(); // ホームID → 写真の配列（詳細画面・編集画面で共有）
   const ADMIN_HASH = "aa217457324bfec5c378be63b53136460d14fc88a8f9cc9a33d9d04495cfa8df";
   let openEditHomeIds = new Set(); // 編集画面のホーム項目の開閉状態（デフォルト全て閉）
   let openEditPostIds = new Set(); // 編集中の投稿ID
@@ -665,8 +714,10 @@
         task = col("companyPasswords").doc(String(p.id)).set({id: String(p.id), password: String(p.password)});
         break;
       case "deleteCompany": {
-        task = col("homes").where("companyId","==",String(p.id)).get().then(snap=>{
+        task = col("homes").where("companyId","==",String(p.id)).get().then(async snap=>{
           const batch = db.batch();
+          const photoSnaps = await Promise.all(snap.docs.map(d=> col("homePhotos").where("homeId","==",d.id).get()));
+          photoSnaps.forEach(ps=> ps.forEach(d=> batch.delete(d.ref)));
           snap.forEach(d=> batch.delete(d.ref));
           batch.delete(col("companies").doc(String(p.id)));
           batch.delete(col("companyPasswords").doc(String(p.id)));
@@ -685,7 +736,18 @@
         break;
       }
       case "deleteHome":
-        task = col("homes").doc(String(p.id)).delete(); break;
+        task = col("homePhotos").where("homeId","==",String(p.id)).get().then(snap=>{
+          const batch = db.batch();
+          snap.forEach(d=> batch.delete(d.ref));
+          batch.delete(col("homes").doc(String(p.id)));
+          return batch.commit();
+        });
+        break;
+      case "addPhoto":
+        task = col("homePhotos").doc(String(p.id)).set({id: String(p.id), homeId: String(p.homeId), data: p.data, order: Number(p.order) || Date.now()});
+        break;
+      case "deletePhoto":
+        task = col("homePhotos").doc(String(p.id)).delete(); break;
       case "addPost":
         task = col("posts").doc(String(p.id)).set(clean_({
           id: p.id, companyId: String(p.companyId), author: p.author || "", text: p.text || "", timestamp: Number(p.timestamp) || Date.now()
@@ -816,7 +878,7 @@
             const genderLabel = h.gender === "male" ? "男性" : h.gender === "female" ? "女性" : "男女";
             const addressLine = [h.postalCode ? `〒${h.postalCode}` : "", h.address || ""].filter(Boolean).join(" ");
             return `
-              <div class="home-row">
+              <div class="home-row" data-action="open-home" data-id="${h.id}">
                 <div class="home-row-top">
                   <div class="home-left">
                     <div class="home-badges">
@@ -827,7 +889,7 @@
                   </div>
                   <div>
                     <span class="status-pill ${full ? "status-full" : "status-vacant"}">${full ? "満室" : "空室"}</span>
-                    <span class="home-count">${h.count}／${h.capacity}名</span>
+                    <span class="home-count">${h.count}／${h.capacity}名</span><span class="home-more">›</span>
                   </div>
                 </div>
                 ${addressLine ? `<div class="home-address">📍 ${escapeHtml(addressLine)}</div>` : ""}
@@ -865,6 +927,12 @@
   }
 
   document.getElementById("topList").addEventListener("click", (e)=>{
+    const homeRow = e.target.closest("[data-action='open-home']");
+    if(homeRow){
+      if(e.target.closest("a")) return;
+      openHomeSheet(homeRow.dataset.id);
+      return;
+    }
     const head = e.target.closest("[data-action='toggle-company']");
     if(!head) return;
     const id = head.dataset.id;
@@ -1071,6 +1139,7 @@
             <input type="text" data-field="buildingName" data-id="${h.id}" value="${escapeHtml(h.buildingName || "")}" placeholder="建物名（ビル・マンションなど）　例：〇〇マンション201" style="margin-top:8px;">
             <label>備考欄</label>
             <textarea data-field="notes" data-id="${h.id}" placeholder="気になる点など自由に入力">${escapeHtml(h.notes || "")}</textarea>
+            ${photoManagerHtml(h.id, false)}
             <div class="post-edit-row">
               <button class="icon-btn" data-action="save-home" data-id="${h.id}">保存</button>
             </div>
@@ -1125,6 +1194,7 @@
           <input type="text" data-field="buildingName" data-id="${d.tempId}" value="${escapeHtml(d.buildingName || "")}" placeholder="建物名（ビル・マンションなど）　例：〇〇マンション201" style="margin-top:8px;">
           <label>備考欄</label>
           <textarea data-field="notes" data-id="${d.tempId}" placeholder="気になる点など自由に入力">${escapeHtml(d.notes || "")}</textarea>
+          ${photoManagerHtml(d.tempId, true)}
           <div class="post-edit-row">
             <button class="icon-btn-lg" data-action="confirm-new-home" data-id="${d.tempId}">登録</button>
           </div>
@@ -1175,6 +1245,7 @@
         </div>
       `;
     }).join("");
+    hydrateEditPhotos();
   }
 
   // ---------- 折りたたみフォームの開閉（汎用） ----------
@@ -1198,6 +1269,230 @@
   }
   setupCollapsibleToggle("toggleAddCompanyBtn", "addCompanyBody", "＋法人を追加", "－閉じる");
   setupCollapsibleToggle("toggleAddPostBtn", "addPostBody", "＋投稿する", "－閉じる");
+
+  // ================= 写真（縮小してFirestoreに保存） =================
+  function photoManagerHtml(ownerId, isDraft){
+    return `
+      <label>写真（最大${MAX_PHOTOS}枚・自動で見やすいサイズに縮小されます）</label>
+      <div class="photo-manager" data-photo-owner="${ownerId}" data-draft="${isDraft ? 1 : 0}">
+        <div class="photo-thumbs" data-photo-thumbs></div>
+        <button type="button" class="btn btn-outline photo-add-btn" data-action="pick-photo">＋写真を追加</button>
+        <input type="file" accept="image/*" multiple data-photo-input style="display:none">
+      </div>`;
+  }
+
+  // 画像を長辺960pxに縮小してJPEGのデータURLにする（約350KB以下になるまで画質を調整）
+  function resizeImage(file, maxSide, quality){
+    return new Promise((resolve, reject)=>{
+      const url = URL.createObjectURL(file);
+      const img = new Image();
+      img.onload = ()=>{
+        URL.revokeObjectURL(url);
+        let w = img.naturalWidth, h = img.naturalHeight;
+        if(!w || !h){ reject(new Error("size")); return; }
+        const scale = Math.min(1, maxSide / Math.max(w, h));
+        w = Math.round(w * scale); h = Math.round(h * scale);
+        const canvas = document.createElement("canvas");
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, w, h);
+        ctx.drawImage(img, 0, 0, w, h);
+        let q = quality;
+        let out = canvas.toDataURL("image/jpeg", q);
+        while(out.length > 350000 && q > 0.4){ q -= 0.1; out = canvas.toDataURL("image/jpeg", q); }
+        resolve(out);
+      };
+      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error("load")); };
+      img.src = url;
+    });
+  }
+
+  function loadPhotos(homeId){
+    if(photoCache.has(homeId)) return Promise.resolve(photoCache.get(homeId));
+    return db.collection("homePhotos").where("homeId", "==", String(homeId)).get().then(snap=>{
+      const list = snap.docs.map(d=>({ ...d.data(), id: d.id })).sort((a,b)=> (a.order||0) - (b.order||0));
+      photoCache.set(homeId, list);
+      return list;
+    });
+  }
+
+  function renderThumbs(mgr){
+    const owner = mgr.dataset.photoOwner;
+    const isDraft = mgr.dataset.draft === "1";
+    let list;
+    if(isDraft){
+      const draft = draftHomes.find(d=>d.tempId === owner);
+      list = ((draft && draft.photos) || []).map((dataUrl, i)=>({ id: String(i), data: dataUrl }));
+    } else {
+      list = photoCache.has(owner) ? photoCache.get(owner) : null;
+    }
+    const box = mgr.querySelector("[data-photo-thumbs]");
+    if(list === null){ box.innerHTML = `<div class="small-gray">読み込み中…</div>`; return; }
+    box.innerHTML = list.map(p=>`<div class="photo-thumb"><img src="${p.data}" alt=""><span class="photo-del" data-action="del-photo" data-photo-id="${p.id}">✕</span></div>`).join("");
+    mgr.querySelector(".photo-add-btn").style.display = list.length >= MAX_PHOTOS ? "none" : "";
+  }
+
+  function hydrateEditPhotos(){
+    document.querySelectorAll("#companyEditList .photo-manager").forEach(mgr=>{
+      if(mgr.dataset.draft === "1"){ renderThumbs(mgr); return; }
+      const item = mgr.closest(".home-edit-item");
+      if(item && item.classList.contains("open")){
+        renderThumbs(mgr);
+        loadPhotos(mgr.dataset.photoOwner).then(()=> renderThumbs(mgr)).catch(()=>{});
+      }
+    });
+  }
+
+  document.getElementById("screen-edit").addEventListener("change", async (e)=>{
+    const input = e.target.closest("[data-photo-input]");
+    if(!input) return;
+    const mgr = input.closest(".photo-manager");
+    const owner = mgr.dataset.photoOwner;
+    const isDraft = mgr.dataset.draft === "1";
+    let files = Array.from(input.files || []);
+    input.value = "";
+    if(files.length === 0) return;
+
+    let current;
+    if(isDraft){
+      const draft = draftHomes.find(d=>d.tempId === owner);
+      if(!draft) return;
+      current = draft.photos.length;
+    } else {
+      try{ current = (await loadPhotos(owner)).length; }
+      catch(err){ showToast("写真を読み込めませんでした。通信状況を確認してください"); return; }
+    }
+    const room = MAX_PHOTOS - current;
+    if(room <= 0){ showToast(`写真は最大${MAX_PHOTOS}枚までです`); return; }
+    if(files.length > room){ showToast(`写真は最大${MAX_PHOTOS}枚までです（先頭の${room}枚を追加します）`); files = files.slice(0, room); }
+
+    showToast("写真を縮小しています…");
+    let failed = 0;
+    for(let i = 0; i < files.length; i++){
+      try{
+        const dataUrl = await resizeImage(files[i], 960, 0.78);
+        if(isDraft){
+          const draft = draftHomes.find(d=>d.tempId === owner);
+          if(draft) draft.photos.push(dataUrl);
+        } else {
+          const photo = { id: uid(), homeId: owner, data: dataUrl, order: Date.now() + i };
+          photoCache.set(owner, [...(photoCache.get(owner) || []), photo]);
+          dbWrite({action:"addPhoto", ...photo});
+        }
+        renderThumbs(mgr);
+      }catch(err){
+        failed++;
+      }
+    }
+    if(failed) showToast("読み込めない画像がありました");
+    else showToast(isDraft ? "写真を追加しました（登録ボタンで保存されます）" : "写真を追加しました");
+  });
+
+  // ================= ホーム詳細（下から出てくる画面） =================
+  let sheetHomeId = null;
+  let sheetCloseTimer = null;
+  function openHomeSheet(homeId){
+    const h = data.homes.find(x=>x.id === homeId);
+    if(!h) return;
+    const c = data.companies.find(x=>String(x.id) === String(h.companyId));
+    sheetHomeId = homeId;
+    clearTimeout(sheetCloseTimer);
+    const body = document.getElementById("sheetBody");
+    body.innerHTML = renderSheetHtml(h, c);
+    body.scrollTop = 0;
+    const ov = document.getElementById("sheetOverlay");
+    ov.classList.add("show");
+    requestAnimationFrame(()=> requestAnimationFrame(()=> ov.classList.add("in")));
+    // 写真は詳細を開いた時に読み込む（一覧を軽く保つため）
+    loadPhotos(homeId).then(list=>{
+      if(sheetHomeId !== homeId) return;
+      fillSheetPhotos(list);
+    }).catch(()=>{
+      if(sheetHomeId !== homeId) return;
+      const box = document.getElementById("sheetPhotos");
+      if(box) box.innerHTML = "";
+    });
+  }
+  function closeHomeSheet(immediate){
+    const ov = document.getElementById("sheetOverlay");
+    sheetHomeId = null;
+    ov.classList.remove("in");
+    document.getElementById("sheet").style.transform = "";
+    clearTimeout(sheetCloseTimer);
+    if(immediate){ ov.classList.remove("show"); document.getElementById("sheetBody").innerHTML = ""; return; }
+    sheetCloseTimer = setTimeout(()=>{ ov.classList.remove("show"); document.getElementById("sheetBody").innerHTML = ""; }, 320);
+  }
+  function fillSheetPhotos(list){
+    const box = document.getElementById("sheetPhotos");
+    if(!box) return;
+    if(!list || list.length === 0){ box.innerHTML = ""; return; }
+    box.innerHTML = `<div class="sheet-carousel" id="sheetCarousel">${list.map(p=>`<img src="${p.data}" alt="ホームの写真">`).join("")}</div>` +
+      (list.length > 1 ? `<div class="sheet-counter" id="sheetCounter">1 / ${list.length}</div>` : "");
+    const car = document.getElementById("sheetCarousel");
+    const counter = document.getElementById("sheetCounter");
+    if(counter){
+      car.addEventListener("scroll", ()=>{
+        const idx = Math.round(car.scrollLeft / car.clientWidth) + 1;
+        counter.textContent = `${Math.min(idx, list.length)} / ${list.length}`;
+      }, {passive:true});
+    }
+  }
+  function renderSheetHtml(h, c){
+    const remain = h.capacity - h.count;
+    const full = remain <= 0;
+    const genderClass = h.gender === "male" ? "gender-male" : h.gender === "female" ? "gender-female" : "gender-any";
+    const genderLabel = h.gender === "male" ? "男性" : h.gender === "female" ? "女性" : "男女";
+    const addressLine = [h.postalCode ? `〒${h.postalCode}` : "", h.address || ""].filter(Boolean).join(" ");
+    const mapQuery = [h.address, h.buildingName].filter(Boolean).join(" ");
+    const chips = c ? [
+      contactChipHtml(c.phone, c.contactPerson),
+      ...(c.contacts || []).map(ct=> contactChipHtml(ct.phone, ct.contactPerson))
+    ].filter(Boolean) : [];
+    return `
+      <div id="sheetPhotos">${photoCache.has(h.id) ? "" : `<div class="sheet-photo-loading">写真を読み込み中…</div>`}</div>
+      <div class="sheet-title">${escapeHtml(h.name)}</div>
+      <div class="sheet-row">
+        <span class="gender-badge ${genderClass}">${genderLabel}</span>
+        ${h.homeType ? `<span class="type-badge">${escapeHtml(h.homeType)}</span>` : ""}
+        <span class="status-pill ${full ? "status-full" : "status-vacant"}">${full ? "満室" : "空室"}</span>
+      </div>
+      <div class="sheet-row">
+        <span class="sheet-vac">空き <b>${Math.max(remain, 0)}</b> 室</span>
+        <span class="home-count">${h.count}／${h.capacity}名</span>
+      </div>
+      ${(addressLine || h.buildingName) ? `
+        <div class="sheet-sec">
+          <h4>📍 住所</h4>
+          ${addressLine ? `<p>${escapeHtml(addressLine)}</p>` : ""}
+          ${h.buildingName ? `<p>${escapeHtml(h.buildingName)}</p>` : ""}
+          ${mapQuery ? `<a class="sheet-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}" target="_blank" rel="noopener">地図で開く</a>` : ""}
+        </div>` : ""}
+      ${h.notes ? `<div class="sheet-sec"><h4>📝 備考</h4><p>${escapeHtml(h.notes)}</p></div>` : ""}
+      ${c ? `<div class="sheet-sec"><h4>🏢 運営法人</h4><p>${escapeHtml(c.name)}</p>${c.address ? `<p style="margin-top:2px; color:var(--textsub); font-size:12.5px;">${escapeHtml(c.address)}</p>` : ""}${chips.length ? `<div class="contact-chips" style="margin-top:8px;">${chips.join("")}</div>` : ""}</div>` : ""}
+    `;
+  }
+  document.getElementById("sheetClose").addEventListener("click", ()=> closeHomeSheet(false));
+  document.getElementById("sheetOverlay").addEventListener("click", e=>{
+    if(e.target.id === "sheetOverlay") closeHomeSheet(false);
+  });
+  // ハンドルを下にドラッグして閉じる
+  (function(){
+    const handle = document.getElementById("sheetHandle");
+    const sheet = document.getElementById("sheet");
+    let startY = null, dy = 0;
+    handle.addEventListener("touchstart", e=>{ startY = e.touches[0].clientY; dy = 0; sheet.style.transition = "none"; }, {passive:true});
+    handle.addEventListener("touchmove", e=>{
+      if(startY === null) return;
+      dy = Math.max(0, e.touches[0].clientY - startY);
+      sheet.style.transform = `translateY(${dy}px)`;
+    }, {passive:true});
+    handle.addEventListener("touchend", ()=>{
+      if(startY === null) return;
+      sheet.style.transition = "";
+      startY = null;
+      if(dy > 90){ closeHomeSheet(false); } else { sheet.style.transform = ""; }
+    });
+  })();
 
   // ---------- 電話番号の自動ハイフン ----------
   function formatPhone(raw){
@@ -1480,12 +1775,39 @@
       return;
     }
 
+    if(action === "pick-photo"){
+      const mgr = btn.closest(".photo-manager");
+      if(mgr) mgr.querySelector("[data-photo-input]").click();
+      return;
+    }
+
+    if(action === "del-photo"){
+      const mgr = btn.closest(".photo-manager");
+      if(!mgr) return;
+      const owner = mgr.dataset.photoOwner;
+      const photoId = btn.dataset.photoId;
+      if(mgr.dataset.draft === "1"){
+        const draft = draftHomes.find(d=>d.tempId === owner);
+        if(draft) draft.photos.splice(Number(photoId), 1);
+        renderThumbs(mgr);
+      } else {
+        askConfirm("この写真を削除しますか？", ()=>{
+          photoCache.set(owner, (photoCache.get(owner) || []).filter(p=>p.id !== photoId));
+          renderThumbs(mgr);
+          dbWrite({action:"deletePhoto", id: photoId});
+        });
+      }
+      return;
+    }
+
     if(action === "toggle-home-edit"){
       const item = btn.closest(".home-edit-item");
       const opening = !item.classList.contains("open");
       if(opening){
         openEditHomeIds.add(id);
         item.classList.add("open");
+        const pm = item.querySelector(".photo-manager");
+        if(pm){ renderThumbs(pm); loadPhotos(id).then(()=> renderThumbs(pm)); }
       } else {
         openEditHomeIds.delete(id);
         item.classList.remove("open");
@@ -1494,7 +1816,7 @@
     }
 
     if(action === "add-home"){
-      draftHomes.push({ tempId: uid(), companyId: id, name: "", gender: "male", capacity: 1, count: 0, notes: "", postalCode: "", address: "", homeType: "", buildingName: "" });
+      draftHomes.push({ tempId: uid(), companyId: id, name: "", gender: "male", capacity: 1, count: 0, notes: "", postalCode: "", address: "", homeType: "", buildingName: "", photos: [] });
       preserveScrollAnchoredTo(`.company-block[data-company-id="${id}"]`, renderEdit);
       return;
     }
@@ -1514,6 +1836,8 @@
       if(!draft) return;
       const newHome = { id: uid(), companyId: draft.companyId, name, gender, capacity, count, notes, postalCode, address, homeType, buildingName };
       data.homes.push(newHome);
+      const draftPhotos = (draft.photos || []).map((dataUrl, i)=>({ id: uid(), homeId: newHome.id, data: dataUrl, order: Date.now() + i }));
+      if(draftPhotos.length) photoCache.set(newHome.id, draftPhotos);
       draftHomes = draftHomes.filter(d=>d.tempId !== id);
       openEditHomeIds.add(newHome.id);
       touchCompanyUpdated(draft.companyId);
@@ -1521,7 +1845,7 @@
       preserveScrollAnchoredTo(`.company-block[data-company-id="${draft.companyId}"]`, ()=>{ renderEdit(); renderTop(); });
       showToast("ホームを登録しました");
       dbWrite({action:"addHome", ...newHome})
-        .then(()=> setTimeout(()=>refreshFromSheet(true), 1200));
+        .then(()=> Promise.all(draftPhotos.map(p=> dbWrite({action:"addPhoto", ...p}))));
       return;
     }
 
@@ -1629,6 +1953,8 @@
   function stopApp(){
     unlockedCompanies.clear();
     openEditCompanyIds.clear();
+    photoCache.clear();
+    closeHomeSheet(true);
     closePwDialog();
     closeAdmin();
     unsubscribers.forEach(u=>u());
