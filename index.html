@@ -31,7 +31,7 @@
     background:var(--bg); color:var(--textmain); padding-bottom:90px;
   }
   header{
-    background:var(--green); color:#fff; padding:16px 16px 14px;
+    background:var(--green); color:#fff; padding:14px 16px;
     position:sticky; top:0; z-index:50;
     border-radius:0 0 20px 20px;
     box-shadow:0 2px 10px rgba(47,169,102,.28);
@@ -46,7 +46,9 @@
     header::before{ background-size:100% auto; background-repeat:no-repeat; }
   }
   header > *{ position:relative; z-index:1; }
-  header h1{margin:0; font-size:17px; font-weight:800; letter-spacing:.5px;}
+  header h1{margin:0; font-size:clamp(17px, 5.2vw, 24px); font-weight:800; letter-spacing:.5px; white-space:nowrap; line-height:1.2;}
+  .head-row{display:flex; align-items:center; justify-content:space-between; gap:10px;}
+  .conn-row{margin-top:6px;}
   .sub-row{display:flex; align-items:center; justify-content:space-between; margin-top:3px; gap:10px;}
   header .sub{font-size:11px; opacity:.9; display:flex; align-items:center; gap:6px;}
   .refresh-btn{
@@ -407,11 +409,11 @@
 <div id="authGate"><div class="box"><h2>🏠 空室情報</h2><p>パスワードを入力してください</p><input type="password" id="authInput" autocomplete="current-password" placeholder="パスワード"><button id="authBtn" type="button">開く</button><div id="authErr"></div></div></div>
 
 <header>
-  <h1>🏡 グループホーム空室情報</h1>
-  <div class="sub-row">
-    <div class="sub"><span class="dot" id="connDot"></span><span id="headerSub">読み込み中…</span></div>
+  <div class="head-row">
+    <h1>グループホーム空室情報</h1>
     <button id="adminBtn" class="refresh-btn" title="管理者モード">🔑 管理者モード</button>
   </div>
+  <div class="sub conn-row" id="connRow" style="display:none"><span class="dot" id="connDot"></span><span id="headerSub"></span></div>
 </header>
 
 <div class="screen active" id="screen-top">
@@ -696,6 +698,8 @@
     const dot = document.getElementById("connDot");
     dot.className = "dot " + state;
     document.getElementById("headerSub").textContent = label;
+    // 通常時は表示せず、接続に問題がある時だけ知らせる
+    document.getElementById("connRow").style.display = state === "err" ? "flex" : "none";
   }
 
   // ---------- Firestore 書き込み ----------
@@ -742,7 +746,7 @@
           id: p.id, companyId: String(p.companyId), name: p.name, gender: p.gender,
           capacity: Number(p.capacity) || 0, count: Number(p.count) || 0,
           notes: p.notes || "", postalCode: p.postalCode || "", address: p.address || "",
-          homeType: p.homeType || "", buildingName: p.buildingName || ""
+          homeType: p.homeType || "", buildingName: p.buildingName || "", phone: p.phone || ""
         }), {merge:true});
         break;
       }
@@ -1148,6 +1152,8 @@
             </div>
             <input type="text" data-field="address" data-id="${h.id}" value="${escapeHtml(h.address || "")}" placeholder="住所　例：埼玉県草加市〇〇1-2-3" style="margin-top:8px;">
             <input type="text" data-field="buildingName" data-id="${h.id}" value="${escapeHtml(h.buildingName || "")}" placeholder="建物名（ビル・マンションなど）　例：〇〇マンション201" style="margin-top:8px;">
+            <label>電話番号（任意）</label>
+            <input type="text" data-field="phone" data-id="${h.id}" value="${escapeHtml(h.phone || "")}" placeholder="例：048-000-0000" inputmode="tel">
             <label>備考欄</label>
             <textarea data-field="notes" data-id="${h.id}" placeholder="気になる点など自由に入力">${escapeHtml(h.notes || "")}</textarea>
             ${photoManagerHtml(h.id, false)}
@@ -1203,6 +1209,8 @@
           </div>
           <input type="text" data-field="address" data-id="${d.tempId}" value="${escapeHtml(d.address || "")}" placeholder="住所　例：埼玉県草加市〇〇1-2-3" style="margin-top:8px;">
           <input type="text" data-field="buildingName" data-id="${d.tempId}" value="${escapeHtml(d.buildingName || "")}" placeholder="建物名（ビル・マンションなど）　例：〇〇マンション201" style="margin-top:8px;">
+          <label>電話番号（任意）</label>
+          <input type="text" data-field="phone" data-id="${d.tempId}" value="${escapeHtml(d.phone || "")}" placeholder="例：048-000-0000" inputmode="tel">
           <label>備考欄</label>
           <textarea data-field="notes" data-id="${d.tempId}" placeholder="気になる点など自由に入力">${escapeHtml(d.notes || "")}</textarea>
           ${photoManagerHtml(d.tempId, true)}
@@ -1455,10 +1463,6 @@
     const genderLabel = h.gender === "male" ? "男性" : h.gender === "female" ? "女性" : "男女";
     const addressLine = [h.postalCode ? `〒${h.postalCode}` : "", h.address || ""].filter(Boolean).join(" ");
     const mapQuery = [h.address, h.buildingName].filter(Boolean).join(" ");
-    const chips = c ? [
-      contactChipHtml(c.phone, c.contactPerson),
-      ...(c.contacts || []).map(ct=> contactChipHtml(ct.phone, ct.contactPerson))
-    ].filter(Boolean) : [];
     return `
       <div id="sheetPhotos">${photoCache.has(h.id) ? "" : `<div class="sheet-photo-loading">写真を読み込み中…</div>`}</div>
       <div class="sheet-title">${escapeHtml(h.name)}</div>
@@ -1478,6 +1482,7 @@
           ${h.buildingName ? `<p>${escapeHtml(h.buildingName)}</p>` : ""}
           ${mapQuery ? `<a class="sheet-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}" target="_blank" rel="noopener">地図で開く</a>` : ""}
         </div>` : ""}
+      ${h.phone ? `<div class="sheet-sec"><h4>☎ 連絡先</h4><div class="contact-chips">${contactChipHtml(h.phone, "")}</div></div>` : ""}
       ${h.notes ? `<div class="sheet-sec"><h4>📝 備考</h4><p>${escapeHtml(h.notes)}</p></div>` : ""}
     `;
   }
@@ -1826,7 +1831,7 @@
     }
 
     if(action === "add-home"){
-      draftHomes.push({ tempId: uid(), companyId: id, name: "", gender: "male", capacity: 1, count: 0, notes: "", postalCode: "", address: "", homeType: "", buildingName: "", photos: [] });
+      draftHomes.push({ tempId: uid(), companyId: id, name: "", gender: "male", capacity: 1, count: 0, notes: "", postalCode: "", address: "", homeType: "", buildingName: "", phone: "", photos: [] });
       preserveScrollAnchoredTo(`.company-block[data-company-id="${id}"]`, renderEdit);
       return;
     }
@@ -1842,9 +1847,10 @@
       const postalCode = item.querySelector("[data-field='postalCode']").value.trim();
       const address = item.querySelector("[data-field='address']").value.trim();
       const buildingName = item.querySelector("[data-field='buildingName']").value.trim();
+      const phone = item.querySelector("[data-field='phone']").value.trim();
       const draft = draftHomes.find(d=>d.tempId === id);
       if(!draft) return;
-      const newHome = { id: uid(), companyId: draft.companyId, name, gender, capacity, count, notes, postalCode, address, homeType, buildingName };
+      const newHome = { id: uid(), companyId: draft.companyId, name, gender, capacity, count, notes, postalCode, address, homeType, buildingName, phone };
       data.homes.push(newHome);
       const draftPhotos = (draft.photos || []).map((dataUrl, i)=>({ id: uid(), homeId: newHome.id, data: dataUrl, order: Date.now() + i }));
       if(draftPhotos.length) photoCache.set(newHome.id, draftPhotos);
@@ -1884,11 +1890,12 @@
       home.postalCode = item.querySelector("[data-field='postalCode']").value.trim();
       home.address = item.querySelector("[data-field='address']").value.trim();
       home.buildingName = item.querySelector("[data-field='buildingName']").value.trim();
+      home.phone = item.querySelector("[data-field='phone']").value.trim();
       touchCompanyUpdated(home.companyId);
       saveLocalCache();
       preserveScrollAnchoredTo(`.company-block[data-company-id="${home.companyId}"]`, ()=>{ renderEdit(); renderTop(); });
       showToast("保存しました");
-      dbWrite({action:"updateHome", id: home.id, companyId: home.companyId, name: home.name, gender: home.gender, capacity: home.capacity, count: home.count, notes: home.notes, postalCode: home.postalCode, address: home.address, homeType: home.homeType, buildingName: home.buildingName})
+      dbWrite({action:"updateHome", id: home.id, companyId: home.companyId, name: home.name, gender: home.gender, capacity: home.capacity, count: home.count, notes: home.notes, postalCode: home.postalCode, address: home.address, homeType: home.homeType, buildingName: home.buildingName, phone: home.phone})
         .then(()=> setTimeout(()=>refreshFromSheet(true), 1200));
       return;
     }
