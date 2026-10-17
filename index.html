@@ -655,10 +655,10 @@
       return [];
     }
   }
-  function contactChipHtml(phone, contactPerson){
+  function contactChipHtml(phone, contactPerson, noIcon){
     if(!phone && !contactPerson) return "";
     const phoneHtml = phone
-      ? `<a href="tel:${escapeHtml(String(phone).replace(/[^0-9+]/g,""))}" onclick="event.stopPropagation()">☎ ${escapeHtml(phone)}</a>`
+      ? `<a href="tel:${escapeHtml(String(phone).replace(/[^0-9+]/g,""))}" onclick="event.stopPropagation()">${noIcon ? "" : "☎ "}${escapeHtml(phone)}</a>`
       : "";
     const personHtml = contactPerson ? escapeHtml(contactPerson) : "";
     let inner;
@@ -1482,7 +1482,7 @@
           ${h.buildingName ? `<p>${escapeHtml(h.buildingName)}</p>` : ""}
           ${mapQuery ? `<a class="sheet-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}" target="_blank" rel="noopener">地図で開く</a>` : ""}
         </div>` : ""}
-      ${h.phone ? `<div class="sheet-sec"><h4>☎ 連絡先</h4><div class="contact-chips">${contactChipHtml(h.phone, "")}</div></div>` : ""}
+      ${h.phone ? `<div class="sheet-sec"><h4>☎ 連絡先</h4><div class="contact-chips">${contactChipHtml(h.phone, "", true)}</div></div>` : ""}
       ${h.notes ? `<div class="sheet-sec"><h4>📝 備考</h4><p>${escapeHtml(h.notes)}</p></div>` : ""}
     `;
   }
