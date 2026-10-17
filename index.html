@@ -133,8 +133,9 @@
   }
   .home-row{
     display:flex; flex-direction:column; gap:6px;
-    padding:12px 16px; font-size:13.5px; border-bottom:1px solid var(--line);
+    padding:14px 16px; font-size:13.5px; border-bottom:2px solid #CFD3C8;
   }
+  .home-row.alt{ background:#EDEEE9; }
   .home-row-top{display:flex; justify-content:space-between; align-items:center;}
   .home-address{
     font-size:11.5px; color:var(--textsub);
@@ -288,7 +289,7 @@
   }
   .section-label{
     font-size:17px; color:#fff; font-weight:800; margin:24px 0 10px; letter-spacing:1px;
-    background:var(--orange); padding:11px 14px; border-radius:999px; text-align:center;
+    background:var(--orange); padding:11px 14px; border-radius:0; text-align:center;
     box-shadow:0 2px 8px rgba(240,116,34,.3);
   }
   .company-block-title-right{display:flex; align-items:center; gap:10px;}
@@ -881,14 +882,14 @@
       ].filter(Boolean);
       const homesHtml = homes.length === 0
         ? `<div class="home-row"><span class="small-gray">ホームが登録されていません</span></div>`
-        : homes.map(h=>{
+        : homes.map((h, homeIdx)=>{
             const remain = h.capacity - h.count;
             const full = remain <= 0;
             const genderClass = h.gender === "male" ? "gender-male" : h.gender === "female" ? "gender-female" : "gender-any";
             const genderLabel = h.gender === "male" ? "男性" : h.gender === "female" ? "女性" : "男女";
             const addressLine = [h.postalCode ? `〒${h.postalCode}` : "", h.address || ""].filter(Boolean).join(" ");
             return `
-              <div class="home-row" data-action="open-home" data-id="${h.id}">
+              <div class="home-row ${homeIdx % 2 === 1 ? "alt" : ""}" data-action="open-home" data-id="${h.id}">
                 <div class="home-row-top">
                   <div class="home-left">
                     <div class="home-badges">
@@ -1478,7 +1479,6 @@
           ${mapQuery ? `<a class="sheet-map" href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(mapQuery)}" target="_blank" rel="noopener">地図で開く</a>` : ""}
         </div>` : ""}
       ${h.notes ? `<div class="sheet-sec"><h4>📝 備考</h4><p>${escapeHtml(h.notes)}</p></div>` : ""}
-      ${c ? `<div class="sheet-sec"><h4>🏢 運営法人</h4><p>${escapeHtml(c.name)}</p>${c.address ? `<p style="margin-top:2px; color:var(--textsub); font-size:12.5px;">${escapeHtml(c.address)}</p>` : ""}${chips.length ? `<div class="contact-chips" style="margin-top:8px;">${chips.join("")}</div>` : ""}</div>` : ""}
     `;
   }
   document.getElementById("sheetClose").addEventListener("click", ()=> closeHomeSheet(false));
